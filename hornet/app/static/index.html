@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hornet AI / Лаборатория переписок</title>
+<style>
+:root {color-scheme:dark;font:16px system-ui, sans-serif;background:#11131a;color:#f4f4f6} *{box-sizing:border-box}
+body{margin:0;max-width:970px;padding:30px 18px;margin-inline:auto}
+h1{margin-bottom:6px;font-size:28px}.muted{color:#a2a6b1}.warning{color:#f6c77f;background:#312618;padding:12px;border-radius:10px;margin:18px 0}
+button,input{font:inherit;border-radius:9px;padding:11px;border:1px solid #3d4250}
+button{background:#464d66;color:white;cursor:pointer}button:hover{background:#5a6588}input{background:#202532;color:white;width:100%}
+.row{display:flex;gap:9px;align-items:center;margin-top:12px}.row input{flex:1}.row button{flex-shrink:0}
+.layout{display:grid;grid-template-columns:240px 1fr;gap:18px;margin-top:24px}
+.panel{background:#1a1e29;border:1px solid #323644;border-radius:14px;padding:15px;min-height:320px}
+#chats button{display:block;width:100%;text-align:left;margin-bottom:8px;background:#242938}
+#chats button.active{background:#414d71;border-color:#7d97d3}
+#messages{height:380px;overflow:auto;display:flex;flex-direction:column;gap:9px;margin:12px 0}
+.msg{max-width:85%;padding:11px 13px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;background:#2c3344;align-self:flex-start}
+.msg.outgoing{background:#375744;align-self:flex-end}
+#error{color:#ffabab;min-height:24px;margin-top:12px}
+@media(max-width:660px){.layout{grid-template-columns:1fr}#messages{height:300px}}
+</style></head><body>
+<h1>🦆 Hornet AI — лаборатория</h1>
+<div class="muted">Демонстрационный ИИ-движок для тестирования разговоров</div>
+<div class="warning"><b>Не подключён к Hornet.</b> Сообщения и ответы остаются в демонстрационной базе на твоём сервере.</div>
+<div id="status" class="muted">Проверка режима...</div>
+<div class="layout">
+<section class="panel"><b>Диалоги</b><div class="row"><input id="newLabel" maxlength="80" placeholder="Имя собеседника"><button id="create">+</button></div><div id="chats" style="margin-top:14px"></div></section>
+<section class="panel"><b id="title">Выбери или создай диалог</b><div id="messages"></div><div class="row"><input id="incoming" maxlength="2000" placeholder="Входящее сообщение"><button id="add">Добавить</button></div><div class="row"><button id="reply">Сгенерировать ответ</button><button id="remove">Удалить диалог</button></div><div id="error"></div></section>
+</div>
+<script>
+let current=null;
+const el=id=>document.getElementById(id);
+async function req(url, method='GET', data){let r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});let result=await r.json();if(!r.ok)throw Error(result.detail||'Ошибка');return result}
+function err(e){el('error').textContent=e.message||String(e)}
+async function loadChats(){let list=await req('/api/chats');el('chats').replaceChildren();for(let c of list){let b=document.createElement('button');b.textContent=c.label;b.className=c.id===current?'active':'';b.onclick=()=>{current=c.id;loadChats();loadMessages()};el('chats').append(b)}if(current===null&&list.length){current=list[0].id;await loadChats();await loadMessages()}}
+async function loadMessages(){let rows=await req(`/api/chats/${current}/messages`);let chats=await req('/api/chats');el('title').textContent=chats.find(x=>x.id===current)?.label||'Диалог';el('messages').replaceChildren();for(let m of rows){let div=document.createElement('div');div.className='msg '+m.direction;div.textContent=m.text;el('messages').append(div)}el('messages').scrollTop=el('messages').scrollHeight}
+el('create').onclick=async()=>{try{let label=el('newLabel').value.trim();if(!label)return;let c=await req('/api/chats','POST',{label});current=c.id;el('newLabel').value='';await loadChats();await loadMessages()}catch(e){err(e)}};
+el('add').onclick=async()=>{try{if(!current)throw Error('Создай диалог');let text=el('incoming').value.trim();if(!text)return;await req(`/api/chats/${current}/incoming`,'POST',{text});el('incoming').value='';await loadMessages()}catch(e){err(e)}};
+el('reply').onclick=async()=>{try{if(!current)throw Error('Создай диалог');el('reply').disabled=true;await req(`/api/chats/${current}/reply`,'POST');await loadMessages()}catch(e){err(e)}finally{el('reply').disabled=false}};
+el('remove').onclick=async()=>{try{if(!current||!confirm('Удалить диалог?'))return;await req(`/api/chats/${current}`,'DELETE');current=null;el('messages').replaceChildren();el('title').textContent='Выбери диалог';await loadChats()}catch(e){err(e)}};
+req('/api/info').then(s=>{el('status').textContent=`ИИ: ${s.llm==='OpenAI'?'OpenAI API подключён':'демо без AI-ключа'} · Автогенерация: ${s.autopilot?'включена':'выключена'} · Hornet: не подключён`}).catch(err);
+loadChats().catch(err);
+</script></body></html>

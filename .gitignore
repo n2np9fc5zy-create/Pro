@@ -23,3 +23,11 @@ build/
 coverage/
 *.log
 .DS_Store
+
+
+# Local chat history
+.local/
+data/
+*.db
+*.db-shm
+*.db-wal
