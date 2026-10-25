@@ -13,10 +13,13 @@ with tempfile.TemporaryDirectory() as directory:
     from app.main import app
     with TestClient(app) as client:
         assert client.get('/').status_code == 200
+        assert client.get('/healthz').json() == {'status': 'ok'}
+        assert client.post('/api/chats', json={'label': '   '}).status_code == 422
         assert client.get('/api/info').json()['connected_to_hornet'] is False
         first = client.post('/api/chats', json={'label': 'Тест A'}).json()['id']
         second = client.post('/api/chats', json={'label': 'Тест Б'}).json()['id']
         assert client.post(f'/api/chats/{first}/incoming', json={'text': 'Привет, это тест'}).status_code == 201
+        assert client.post(f'/api/chats/{first}/incoming', json={'text': ' \n\t'}).status_code == 422
         result = client.post(f'/api/chats/{first}/reply')
         assert result.status_code == 200
         assert result.json()['sent_to_hornet'] is False

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from .core import get_engine
 
 DB_PATH = Path(os.getenv("DB_PATH", "/app/data/chats.db"))
@@ -44,11 +44,18 @@ with db() as con:
     """)
 
 
-class NewChat(BaseModel):
+class NonBlankPayload(BaseModel):
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class NewChat(NonBlankPayload):
     label: str = Field(min_length=1, max_length=80)
 
 
-class IncomingMessage(BaseModel):
+class IncomingMessage(NonBlankPayload):
     text: str = Field(min_length=1, max_length=2000)
 
 
@@ -68,6 +75,16 @@ def history(chat_id: int) -> list[dict]:
 @app.get("/")
 def home():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+@app.get("/healthz")
+def health():
+    try:
+        with db() as con:
+            con.execute("SELECT 1").fetchone()
+    except sqlite3.Error:
+        raise HTTPException(503, "Storage unavailable") from None
+    return {"status": "ok"}
 
 
 @app.get("/api/info")
